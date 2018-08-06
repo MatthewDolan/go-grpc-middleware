@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/grpc-ecosystem/go-grpc-middleware/util/metautils"
+	"github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go/log"
 	"golang.org/x/net/context"
 	"golang.org/x/net/trace"
 	"google.golang.org/grpc"
@@ -288,9 +290,18 @@ func contextErrToGrpcErr(err error) error {
 }
 
 func logTrace(ctx context.Context, format string, a ...interface{}) {
-	tr, ok := trace.FromContext(ctx)
-	if !ok {
-		return
+	if tr, ok := trace.FromContext(ctx); ok {
+		tr.LazyPrintf(format, a...)
 	}
-	tr.LazyPrintf(format, a...)
+
+	if otTr := opentracing.SpanFromContext(ctx); otTr != nil {
+		otTr.LogFields(
+			log.Lazy(func(encoder log.Encoder) {
+				encoder.EmitString(
+					"event",
+					fmt.Sprintf(format, a...),
+				)
+			}),
+		)
+	}
 }
